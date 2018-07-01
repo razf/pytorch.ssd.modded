@@ -8,7 +8,10 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+
 env/
+
+
 build/
 develop-eggs/
 dist/
@@ -20,9 +23,17 @@ lib64/
 parts/
 sdist/
 var/
+
 *.egg-info/
 .installed.cfg
 *.egg
+
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -44,6 +55,10 @@ nosetests.xml
 coverage.xml
 *,cover
 .hypothesis/
+*.cover
+.hypothesis/
+.pytest_cache/
+
 
 # Translations
 *.mo
@@ -52,6 +67,8 @@ coverage.xml
 # Django stuff:
 *.log
 local_settings.py
+
+db.sqlite
 
 # Flask stuff:
 instance/
@@ -67,6 +84,8 @@ docs/_build/
 target/
 
 # IPython Notebook
+# Jupyter Notebook
+
 .ipynb_checkpoints
 
 # pyenv
@@ -74,6 +93,7 @@ target/
 
 # celery beat schedule file
 celerybeat-schedule
+
 
 # dotenv
 .env
@@ -85,8 +105,26 @@ ENV/
 # Spyder project settings
 .spyderproject
 
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+
 # Rope project settings
 .ropeproject
+
 
 # atom remote-sync package
 .remote-sync.json
@@ -126,3 +164,9 @@ data/ssd_dataloader.py
 
 # pylint
 .pylintrc
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
