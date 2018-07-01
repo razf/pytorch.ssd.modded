@@ -14,6 +14,8 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
+import visdom
+viz = visdom.Visdom()
 
 
 def str2bool(v):
@@ -39,7 +41,7 @@ parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
+parser.add_argument('--lr', '--learning-rate', default=5e-4, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
                     help='Momentum value for optim')
@@ -70,27 +72,25 @@ if not os.path.exists(args.save_folder):
 
 def train():
     if args.dataset == 'COCO':
-        if args.dataset_root == VOC_ROOT:
-            if not os.path.exists(COCO_ROOT):
-                parser.error('Must specify dataset_root if specifying dataset')
-            print("WARNING: Using default COCO dataset_root because " +
-                  "--dataset_root was not specified.")
-            args.dataset_root = COCO_ROOT
-        cfg = coco
-        dataset = COCODetection(root=args.dataset_root,
-                                transform=SSDAugmentation(cfg['min_dim'],
-                                                          MEANS))
+        pass
+#         if args.dataset_root == VOC_ROOT:
+#             if not os.path.exists(COCO_ROOT):
+#                 parser.error('Must specify dataset_root if specifying dataset')
+#             print("WARNING: Using default COCO dataset_root because " +
+#                   "--dataset_root was not specified.")
+#             args.dataset_root = COCO_ROOT
+#         cfg = coco
+#         dataset = COCODetection(root=args.dataset_root,
+#                                 transform=SSDAugmentation(cfg['min_dim'],
+#                                                           MEANS))
     elif args.dataset == 'VOC':
-        if args.dataset_root == COCO_ROOT:
-            parser.error('Must specify dataset if specifying dataset_root')
+#         if args.dataset_root == COCO_ROOT:
+#             parser.error('Must specify dataset if specifying dataset_root')
         cfg = voc
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
 
-    if args.visdom:
-        import visdom
-        viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
@@ -129,7 +129,7 @@ def train():
     epoch = 0
     print('Loading the dataset...')
 
-    epoch_size = len(dataset) // args.batch_size
+    epoch_size = len(dataset) // args.batch_size - 2 
     print('Training SSD on:', dataset.name)
     print('Using the specified args:')
     print(args)
@@ -149,7 +149,7 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
+        if iteration != 0 and (iteration % epoch_size == 0):
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)
             # reset epoch loss counters
@@ -160,9 +160,13 @@ def train():
         if iteration in cfg['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
-
+        
+        try:
         # load train data
-        images, targets = next(batch_iterator)
+            images, targets = next(batch_iterator)
+        except StopIteration:
+            batch_iterator = iter(data_loader)
+            images, targets = next(batch_iterator)
 
         if args.cuda:
             images = Variable(images.cuda())
@@ -180,12 +184,12 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        loc_loss += loss_l.item()
+        conf_loss += loss_c.item()
 
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.item()), end=' ')
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
@@ -246,9 +250,14 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
         viz.line(
             X=torch.zeros((1, 3)).cpu(),
             Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu(),
-            win=window2,
+            win=window1,
             update=True
         )
+
+# update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
+#         'append', epoch_size)
+# update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
+#                 iter_plot, epoch_plot, 'append')
 
 
 if __name__ == '__main__':
