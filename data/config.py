@@ -40,3 +40,25 @@ coco = {
     'clip': True,
     'name': 'COCO',
 }
+
+#num_classes: how many classes are there (+1 for bg)
+#lr_steps: decrease LR at iteration step
+#max_iter: stop at iteration max_iter
+#feature_maps: height/width of feature maps to take the detections from
+#min_dim: image size
+
+stanford = {
+    'num_classes': 7,
+    'lr_steps': (80000, 100000, 120000),
+    'max_iter': 120000,
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'min_dim': 1200,
+    'steps': [8, 16, 32, 64, 74, 80],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'STANFORD',
+    
+}

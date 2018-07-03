@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco
+from data import voc, coco, stanford
 import os
 
 
@@ -30,6 +30,7 @@ class SSD(nn.Module):
         self.phase = phase
         self.num_classes = num_classes
         self.cfg = (coco, voc)[num_classes == 21]
+        self.cfg = stanford
         self.priorbox = PriorBox(self.cfg)
         self.priors = Variable(self.priorbox.forward(), volatile=True)
         self.size = size
@@ -89,12 +90,15 @@ class SSD(nn.Module):
                 sources.append(x)
 
         # apply multibox head to source layers
+#         for s in sources:
+#             print( s.shape)
         for (x, l, c) in zip(sources, self.loc, self.conf):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+#         print(loc.view(loc.size(0), -1, 4).shape, self.priors)
         if self.phase == "test":
             output = self.detect(
                 loc.view(loc.size(0), -1, 4),                   # loc preds
@@ -147,6 +151,8 @@ def vgg(cfg, i, batch_norm=False):
 
 
 def add_extras(cfg, i, batch_norm=False):
+#        '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
+
     # Extra layers added to VGG for feature scaling
     layers = []
     in_channels = i
@@ -199,11 +205,11 @@ def build_ssd(phase, size=300, num_classes=21):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300:
-        print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) is supported!")
-        return
-    base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                     add_extras(extras[str(size)], 1024),
-                                     mbox[str(size)], num_classes)
+    #if size != 300:
+        #print("ERROR: You specified size " + repr(size) + ". However, " +
+              #"currently only SSD300 (size=300) is supported!")
+        #return
+    base_, extras_, head_ = multibox(vgg(base[str(300)], 3),
+                                     add_extras(extras[str(300)], 1024),
+                                     mbox[str(300)], num_classes)
     return SSD(phase, size, base_, extras_, head_, num_classes)

@@ -1,10 +1,3 @@
-"""VOC Dataset Classes
-
-Original author: Francisco Massa
-https://github.com/fmassa/vision/blob/voc_dataset/torchvision/datasets/voc.py
-
-Updated by: Ellis Brown, Max deGroot
-"""
 from .config import HOME
 import os.path as osp
 import sys
@@ -17,18 +10,14 @@ if sys.version_info[0] == 2:
 else:
     import xml.etree.ElementTree as ET
 
-VOC_CLASSES = (  # always index 0
-    'aeroplane', 'bicycle', 'bird', 'boat',
-    'bottle', 'bus', 'car', 'cat', 'chair',
-    'cow', 'diningtable', 'dog', 'horse',
-    'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
+STANFORD_CLASSES = (  # always index 0
+    'Biker', 'Bus', 'Car', 'Cart', 'Pedestrian', 'Skater')
 
 # note: if you used our download scripts, this should be right
-VOC_ROOT = osp.join(HOME, "data/VOCdevkit/")
+STANFORD_ROOT = osp.join(HOME, "stanford_aerial/PascalVOC_Images/")
 
 
-class VOCAnnotationTransform(object):
+class StanfordAnnotationTransform(object):
     """Transforms a VOC annotation into a Tensor of bbox coords and label index
     Initilized with a dictionary lookup of classnames to indexes
 
@@ -43,7 +32,7 @@ class VOCAnnotationTransform(object):
 
     def __init__(self, class_to_ind=None, keep_difficult=False):
         self.class_to_ind = class_to_ind or dict(
-            zip(VOC_CLASSES, range(len(VOC_CLASSES))))
+            zip([cls.lower() for cls in STANFORD_CLASSES], range(len(STANFORD_CLASSES))))
         self.keep_difficult = keep_difficult
 
     def __call__(self, target, width, height):
@@ -77,7 +66,7 @@ class VOCAnnotationTransform(object):
         return res  # [[xmin, ymin, xmax, ymax, label_ind], ... ]
 
 
-class VOCDetection(data.Dataset):
+class StanfordDetection(data.Dataset):
     """VOC Detection Dataset Object
 
     input is image, target is annotation
@@ -94,27 +83,24 @@ class VOCDetection(data.Dataset):
             (default: 'VOC2007')
     """
 
-    def __init__(self, root,
-                 image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
-                 transform=None, target_transform=VOCAnnotationTransform(),
-                 dataset_name='VOC0712'):
+    def __init__(self, root, image_sets=['trainval'],
+                 transform=None, target_transform=StanfordAnnotationTransform(),
+                 dataset_name='Stanford'):
         self.root = root
-        self.image_set = image_sets
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
         self._annopath = osp.join('%s', 'Annotations', '%s.xml')
         self._imgpath = osp.join('%s', 'JPEGImages', '%s.jpg')
         self.ids = list()
-        for (year, name) in image_sets:
-            rootpath = osp.join(self.root, 'VOC' + year)
-            rootpath = osp.join(self.root)
-            for line in open(osp.join(rootpath, 'ImageSets', 'Main', name + '.txt')):
+        rootpath = osp.join(self.root)
+        for image_set in image_sets:
+            for line in open(osp.join(rootpath, 'ImageSets', 'Main', image_set + '.txt')):
                 self.ids.append((rootpath, line.strip()))
 
+            
     def __getitem__(self, index):
         im, gt, h, w = self.pull_item(index)
-
         return im, gt
 
     def __len__(self):
@@ -132,7 +118,10 @@ class VOCDetection(data.Dataset):
 
         if self.transform is not None:
             target = np.array(target)
-            img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
+            if target.shape[0]==0:
+                img, boxes, labels = self.transform(img, None, None)
+            else:
+                img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
             # to rgb
             img = img[:, :, (2, 1, 0)]
             # img = img.transpose(2, 0, 1)

@@ -2,6 +2,7 @@ from __future__ import division
 from math import sqrt as sqrt
 from itertools import product as product
 import torch
+import numpy as np
 
 
 class PriorBox(object):
@@ -27,7 +28,8 @@ class PriorBox(object):
 
     def forward(self):
         mean = []
-        for k, f in enumerate(self.feature_maps):
+#         for k, f in enumerate(self.feature_maps):
+        for k, f in enumerate([np.ceil(self.image_size/step).astype(np.int32) for step in self.steps]):
             for i, j in product(range(f), repeat=2):
                 f_k = self.image_size / self.steps[k]
                 # unit center x,y

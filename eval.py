@@ -10,7 +10,9 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
-from data import VOC_CLASSES as labelmap
+from data import STANFORD_ROOT, StanfordAnnotationTransform, StanfordDetection, BaseTransform
+from data import VOC_CLASSES as labelmap_voc
+from data import STANFORD_CLASSES as labelmap
 import torch.utils.data as data
 
 from ssd import build_ssd
@@ -66,12 +68,19 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
-imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
-imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
+# annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
+# imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
+# imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
+#                           'Main', '{:s}.txt')
+annopath = os.path.join(STANFORD_ROOT, 'Annotations', '%s.xml')
+imgpath = os.path.join(STANFORD_ROOT, 'JPEGImages', '%s.jpg')
+imgsetpath = os.path.join(STANFORD_ROOT, 'ImageSets',
                           'Main', '{:s}.txt')
-YEAR = '2007'
-devkit_path = args.voc_root + 'VOC' + YEAR
+
+
+# YEAR = '2007'
+# devkit_path = args.voc_root + 'VOC' + YEAR
+devkit_path = STANFORD_ROOT
 dataset_mean = (104, 117, 123)
 set_type = 'test'
 
@@ -421,18 +430,18 @@ def evaluate_detections(box_list, output_dir, dataset):
 if __name__ == '__main__':
     # load net
     num_classes = len(labelmap) + 1                      # +1 for background
-    net = build_ssd('test', 300, num_classes)            # initialize SSD
+    net = build_ssd('test', 1200, num_classes)            # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)],
-                           BaseTransform(300, dataset_mean),
-                           VOCAnnotationTransform())
+    dataset = StanfordDetection(STANFORD_ROOT, [set_type],
+                           BaseTransform(1200, dataset_mean),
+                           StanfordAnnotationTransform())
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
-             BaseTransform(net.size, dataset_mean), args.top_k, 300,
+             BaseTransform(net.size, dataset_mean), args.top_k, 1200,
              thresh=args.confidence_threshold)
