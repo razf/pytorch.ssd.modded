@@ -9,11 +9,14 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
+from data import *
 from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
 from data import STANFORD_ROOT, StanfordAnnotationTransform, StanfordDetection, BaseTransform
-from data import VOC_CLASSES as labelmap_voc
 from data import STANFORD_CLASSES as labelmap
 import torch.utils.data as data
+import matplotlib.pyplot as plt
+
+
 
 from ssd import build_ssd
 
@@ -38,7 +41,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Evaluation')
 parser.add_argument('--trained_model',
-                    default='weights/ssd300_mAP_77.43_v2.pth', type=str,
+                    default='weights/ssd300_STANFORD_epoch_49.0.pth', type=str,
                     help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -50,6 +53,8 @@ parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
 parser.add_argument('--voc_root', default=VOC_ROOT,
                     help='Location of VOC root directory')
+parser.add_argument('--stanford_root', default=STANFORD_ROOT,
+                    help='Location of STANFORD root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 
@@ -172,6 +177,7 @@ def write_voc_results_file(all_boxes, dataset):
 def do_python_eval(output_dir='output', use_07=True):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
+    aps_vec = np.zeros((len(labelmap),11))
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
     print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
@@ -179,9 +185,10 @@ def do_python_eval(output_dir='output', use_07=True):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
         filename = get_voc_results_file_template(set_type, cls)
-        rec, prec, ap = voc_eval(
+        rec, prec, ap,ap_vec = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
+        aps_vec[i-1,:]=ap_vec
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
@@ -198,6 +205,19 @@ def do_python_eval(output_dir='output', use_07=True):
     print('Results computed with the **unofficial** Python eval code.')
     print('Results should be very close to the official MATLAB eval code.')
     print('--------------------------------------------------------------')
+    print('aps_vec:')
+    print(aps_vec.shape)
+    print(aps_vec)
+    np.save('aps_vector.txt',np.mean(aps_vec,axis=0))
+#     plt.plot()
+#     plt.grid()
+#     plt.title('mAP plot')
+#     plt.xlabel('recoil')
+#     plt.ylabel('precision')
+#     plt.xlim([0,1])
+#     plt.ylim([0,1])
+#     plt.show()
+    
 
 
 def voc_ap(rec, prec, use_07_metric=True):
@@ -209,12 +229,16 @@ def voc_ap(rec, prec, use_07_metric=True):
     if use_07_metric:
         # 11 point metric
         ap = 0.
+        count = 0
+        ap_vec = np.zeros(11)
         for t in np.arange(0., 1.1, 0.1):
             if np.sum(rec >= t) == 0:
                 p = 0
             else:
                 p = np.max(prec[rec >= t])
+            ap_vec[count] = p
             ap = ap + p / 11.
+            count = count+1
     else:
         # correct AP calculation
         # first append sentinel values at the end
@@ -231,7 +255,7 @@ def voc_ap(rec, prec, use_07_metric=True):
 
         # and sum (\Delta recall) * prec
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    return ap
+    return ap,ap_vec
 
 
 def voc_eval(detpath,
@@ -361,13 +385,13 @@ cachedir: Directory for caching the annotations
         # avoid divide by zero in case the first detection matches a difficult
         # ground truth
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-        ap = voc_ap(rec, prec, use_07_metric)
+        ap,ap_vec = voc_ap(rec, prec, use_07_metric)
     else:
         rec = -1.
         prec = -1.
         ap = -1.
 
-    return rec, prec, ap
+    return rec, prec, ap,ap_vec
 
 
 def test_net(save_folder, net, cuda, dataset, transform, top_k,
@@ -391,6 +415,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         if args.cuda:
             x = x.cuda()
         _t['im_detect'].tic()
+        #detections is of size [1,num_classes+1,200 boxes,5 detection score + 4 poinst]  class ==0 is for bg
         detections = net(x).data
         detect_time = _t['im_detect'].toc(average=False)
 
@@ -429,14 +454,15 @@ def evaluate_detections(box_list, output_dir, dataset):
 
 if __name__ == '__main__':
     # load net
+    cfg=stanford
     num_classes = len(labelmap) + 1                      # +1 for background
-    net = build_ssd('test', 1200, num_classes)            # initialize SSD
+    net = build_ssd('test', cfg['min_dim'], num_classes)            # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
     dataset = StanfordDetection(STANFORD_ROOT, [set_type],
-                           BaseTransform(1200, dataset_mean),
+                           BaseTransform(cfg['min_dim'], dataset_mean),
                            StanfordAnnotationTransform())
     if args.cuda:
         net = net.cuda()

@@ -31,7 +31,7 @@ parser.add_argument('--dataset_root', default=VOC_ROOT,
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
-parser.add_argument('--batch_size', default=32, type=int,
+parser.add_argument('--batch_size', default=12, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
@@ -53,6 +53,8 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--optimizer', default='SGD',type=str,
+                    help='Optimizer for training: SGD,Adam,RMSProp,Adadelta')
 args = parser.parse_args()
 
 
@@ -123,8 +125,19 @@ def train():
         ssd_net.extras.apply(weights_init)
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay)
+    if args.optimizer == 'Adadelta':
+        optimizer = optim.Adadelta(net.parameters(), lr=args.lr, momentum=args.momentum,
+                          weight_decay=args.weight_decay);
+    elif args.optimizer == 'RMSProp':
+        optimizer = optim.RMSProp(net.parameters(), lr=args.lr,
+                          weight_decay=args.weight_decay);
+    elif args.optimizer == 'Adam':
+        optimizer = optim.Adam(net.parameters(), lr=args.lr,
+                          weight_decay=args.weight_decay);
+    else: 
+        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+                          weight_decay=args.weight_decay);
+ 
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
