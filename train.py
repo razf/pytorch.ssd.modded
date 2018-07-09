@@ -15,8 +15,12 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 import visdom
+from choose_optimizer import *
+from tensorboardX import SummaryWriter
+import eval_batches
 viz = visdom.Visdom()
 
+writer = SummaryWriter()
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -25,9 +29,9 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'STANFORD'],
+parser.add_argument('--dataset', default='STANFORD', choices=['VOC', 'COCO', 'STANFORD'],
                     type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default=VOC_ROOT,
+parser.add_argument('--dataset_root', default=STANFORD_ROOT,
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
@@ -98,10 +102,10 @@ def train():
 #             parser.error('Must specify dataset if specifying dataset_root')
         cfg = stanford
         dataset = StanfordDetection(root=args.dataset_root,
-                               transform=SSDAugmentation(cfg['min_dim'],
+                               transform=SSDAugmentation(cfg['width'],cfg['height'],
                                                          MEANS))
 
-    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    ssd_net = build_ssd('train', cfg['width'],cfg['height'], cfg['num_classes'])
     net = ssd_net
 
     if args.cuda:
@@ -125,18 +129,7 @@ def train():
         ssd_net.extras.apply(weights_init)
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
-    if args.optimizer == 'Adadelta':
-        optimizer = optim.Adadelta(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay);
-    elif args.optimizer == 'RMSProp':
-        optimizer = optim.RMSProp(net.parameters(), lr=args.lr,
-                          weight_decay=args.weight_decay);
-    elif args.optimizer == 'Adam':
-        optimizer = optim.Adam(net.parameters(), lr=args.lr,
-                          weight_decay=args.weight_decay);
-    else: 
-        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay);
+    optimizer = choose_optimizer(args.optimizer,args.lr,args.momentum,args.weight_decay,net)
  
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
@@ -180,6 +173,7 @@ def train():
             # reset epoch loss counters
             loc_loss = 0
             conf_loss = 0
+            eval_batches.main()
             epoch += 1
 
         if iteration in cfg['lr_steps']:
@@ -195,7 +189,8 @@ def train():
 
         if args.cuda:
             images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            with torch.no_grad():
+                targets = [Variable(ann.cuda()) for ann in targets]
         else:
             images = Variable(images)
             targets = [Variable(ann, volatile=True) for ann in targets]
@@ -210,6 +205,9 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
+        
+        writer.add_scalar('time', t1-t0, iteration)
+        writer.add_scalar('loss', loss, iteration)
         loc_loss += loss_l.item()
         conf_loss += loss_c.item()
 
@@ -227,6 +225,7 @@ def train():
 #                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
                args.save_folder + '' + args.dataset + '.pth')
+    writer.close()
 
 
 def adjust_learning_rate(optimizer, gamma, step):
@@ -241,7 +240,7 @@ def adjust_learning_rate(optimizer, gamma, step):
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):

@@ -174,10 +174,12 @@ def write_voc_results_file(all_boxes, dataset):
                                    dets[k, 2] + 1, dets[k, 3] + 1))
 
 
-def do_python_eval(output_dir='output', use_07=True):
+def do_python_eval(output_dir='output', use_07=False):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
-    aps_vec = np.zeros((len(labelmap),11))
+    jump=0.001
+    aprox_recall_vec = np.arange(0,1+jump,jump)
+    aprox_prec_vec = np.zeros((len(labelmap),len(aprox_recall_vec)))
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
     print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
@@ -185,10 +187,10 @@ def do_python_eval(output_dir='output', use_07=True):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
         filename = get_voc_results_file_template(set_type, cls)
-        rec, prec, ap,ap_vec = voc_eval(
+        rec, prec, ap= voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
-        aps_vec[i-1,:]=ap_vec
+        aprox_prec_vec[i,:] = np.interp(aprox_recall_vec,rec,prec)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
@@ -205,10 +207,10 @@ def do_python_eval(output_dir='output', use_07=True):
     print('Results computed with the **unofficial** Python eval code.')
     print('Results should be very close to the official MATLAB eval code.')
     print('--------------------------------------------------------------')
-    print('aps_vec:')
-    print(aps_vec.shape)
-    print(aps_vec)
-    np.save('aps_vector.txt',np.mean(aps_vec,axis=0))
+    print('aprox_prec_vec:')
+    print(aprox_prec_vec.shape)
+    print(aprox_prec_vec)
+    np.save('aprox_prec_vec',aprox_prec_vec)
 #     plt.plot()
 #     plt.grid()
 #     plt.title('mAP plot')
@@ -220,7 +222,7 @@ def do_python_eval(output_dir='output', use_07=True):
     
 
 
-def voc_ap(rec, prec, use_07_metric=True):
+def voc_ap(rec, prec, use_07_metric=False):
     """ ap = voc_ap(rec, prec, [use_07_metric])
     Compute VOC AP given precision and recall.
     If use_07_metric is true, uses the
@@ -255,7 +257,8 @@ def voc_ap(rec, prec, use_07_metric=True):
 
         # and sum (\Delta recall) * prec
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    return ap,ap_vec
+
+    return ap
 
 
 def voc_eval(detpath,
@@ -264,7 +267,7 @@ def voc_eval(detpath,
              classname,
              cachedir,
              ovthresh=0.5,
-             use_07_metric=True):
+             use_07_metric=False):
     """rec, prec, ap = voc_eval(detpath,
                            annopath,
                            imagesetfile,
@@ -366,7 +369,7 @@ cachedir: Directory for caching the annotations
                        (BBGT[:, 3] - BBGT[:, 1]) - inters)
                 overlaps = inters / uni
                 ovmax = np.max(overlaps)
-                jmax = np.argmax(overlaps)
+                jmax = np.argmax(overlaps)  
 
             if ovmax > ovthresh:
                 if not R['difficult'][jmax]:
@@ -385,13 +388,13 @@ cachedir: Directory for caching the annotations
         # avoid divide by zero in case the first detection matches a difficult
         # ground truth
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-        ap,ap_vec = voc_ap(rec, prec, use_07_metric)
+        ap = voc_ap(rec, prec, use_07_metric)
     else:
         rec = -1.
         prec = -1.
         ap = -1.
 
-    return rec, prec, ap,ap_vec
+    return rec, prec, ap
 
 
 def test_net(save_folder, net, cuda, dataset, transform, top_k,
@@ -410,14 +413,21 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
-
+        
+        
         x = Variable(im.unsqueeze(0))
+        #print('x')
+        #print(x.shape)
+        #print('gt')
+        #print(gt)
+        #print(gt.shape)
         if args.cuda:
             x = x.cuda()
         _t['im_detect'].tic()
         #detections is of size [1,num_classes+1,200 boxes,5 detection score + 4 poinst]  class ==0 is for bg
         detections = net(x).data
         detect_time = _t['im_detect'].toc(average=False)
+        #print(detections.shape)
 
         # skip j = 0, because it's the background class
         for j in range(1, detections.size(1)):

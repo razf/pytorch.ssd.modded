@@ -102,12 +102,13 @@ class ToPercentCoords(object):
 
 
 class Resize(object):
-    def __init__(self, size=300):
-        self.size = size
+    def __init__(self, height,width):
+        self.height = height
+        self.width = width
 
     def __call__(self, image, boxes=None, labels=None):
-        image = cv2.resize(image, (self.size,
-                                 self.size))
+        image = cv2.resize(image, (self.width,
+                                 self.height))
         return image, boxes, labels
 
 
@@ -398,9 +399,10 @@ class PhotometricDistort(object):
 
 
 class SSDAugmentation(object):
-    def __init__(self, size=300, mean=(104, 117, 123)):
+    def __init__(self, width,height, mean=(104, 117, 123)):
         self.mean = mean
-        self.size = size
+        self.width = width
+        self.height = height
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),
@@ -409,7 +411,7 @@ class SSDAugmentation(object):
             RandomSampleCrop(),
             RandomMirror(),
             ToPercentCoords(),
-            Resize(self.size),
+            Resize(self.height,self.width),
             SubtractMeans(self.mean)
         ])
 
