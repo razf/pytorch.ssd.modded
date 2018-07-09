@@ -185,7 +185,8 @@ def write_voc_results_file(all_boxes, dataset):
 def do_python_eval(output_dir='output', use_07=False):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
     aps = []
-    aps_vec = np.zeros((len(labelmap),11))
+    precision_vec = np.linspace(0,1,1001)
+    recall_mat = np.zeros((len(labelmap),1001))
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
     print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
@@ -196,7 +197,7 @@ def do_python_eval(output_dir='output', use_07=False):
         rec, prec, ap = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
-        #aps_vec[i-1,:]=ap_vec
+        recall_mat[i] = np.interp(precision_vec, rec, prec)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
@@ -213,10 +214,7 @@ def do_python_eval(output_dir='output', use_07=False):
     print('Results computed with the **unofficial** Python eval code.')
     print('Results should be very close to the official MATLAB eval code.')
     print('--------------------------------------------------------------')
-    print('aps_vec:')
-    print(aps_vec.shape)
-    print(aps_vec)
-    np.save('aps_vector.txt',np.mean(aps_vec,axis=0))
+    np.save('recall_mat.txt',recall_mat)
 #     plt.plot()
 #     plt.grid()
 #     plt.title('mAP plot')
@@ -432,9 +430,9 @@ def test_net(save_folder, net, cuda, dataset,batch_size,transform, top_k,
     for i in range(max_iterations):
         images, targets = next(batch_iterator)
 #         im, gt, h, w = dataset.pull_item(i)
-        h = 1904
-        w = 1400
-#         print(images[0].shape)
+        h = 1200
+        w = 1200
+        print(images.shape)
 #         print(h1)
 #         print(w1)
 #         print(im.shape)
@@ -449,20 +447,15 @@ def test_net(save_folder, net, cuda, dataset,batch_size,transform, top_k,
         _t['im_detect'].tic()
 #         print(i)
         #detections is of size [1,num_classes+1,200 boxes,5 detection score + 4 points]  class ==0 is for bg
-        print(x.shape)
+        
         detections_per_batch = net(x).data
         print(detections_per_batch.shape)
-
-#         detections_per_batch2 = net(y).data.cpu().numpy()
-#         print(np.sum(np.abs(detections_per_batch[2]-detections_per_batch2[0])))
-#         detections_per_batch = net(x).data.cpu().numpy()
-        
         for b in range(batch_size):
      
             gt = targets[b]
             detections = detections_per_batch[b]
             detections = detections[None]
-            print(detections.shape)
+            
 #             detections = np.expand_dims(detections_per_batch[b],axis=0)
             detect_time = _t['im_detect'].toc(average=False)
 
@@ -505,12 +498,13 @@ def evaluate_detections(box_list, output_dir, dataset):
     write_voc_results_file(box_list, dataset)
     do_python_eval(output_dir)
 
-def main():
+def evaluate_model(trained_model):
+# if __name__ == '__main__':
     # load net
     cfg=stanford
     num_classes = len(labelmap) + 1                      # +1 for background
     net = build_ssd('test', cfg['width'],cfg['height'], num_classes)        # initialize SSD
-    net.load_state_dict(torch.load(args.trained_model))
+    net.load_state_dict(torch.load(trained_model))
     net.eval()
     print('Finished loading model!')
     # load data

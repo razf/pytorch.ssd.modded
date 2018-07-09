@@ -32,7 +32,8 @@ class SSD(nn.Module):
         self.cfg = (coco, voc)[num_classes == 21]
         self.cfg = stanford
         self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        with torch.no_grad():
+            self.priors = Variable(self.priorbox.forward())
         self.width = width
         self.height = height
 
